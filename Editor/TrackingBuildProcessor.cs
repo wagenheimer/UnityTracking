@@ -150,11 +150,20 @@ namespace Wagenheimer.Tracking.Editor
                 var written = new PlistDocument();
                 written.ReadFromFile(plistPath);
 
-                bool ok = written.root.values != null &&
-                          written.root.values.TryGetValue(PurposeKey, out var value) &&
-                          value != null &&
-                          value.type == PlistElementType.String &&
-                          value.AsString() == purpose;
+                bool ok = false;
+                if (written.root.values != null &&
+                    written.root.values.TryGetValue(PurposeKey, out var value) &&
+                    value != null)
+                {
+                    try
+                    {
+                        ok = value.AsString() == purpose;
+                    }
+                    catch (Exception)
+                    {
+                        ok = false;
+                    }
+                }
 
                 if (!ok)
                 {
