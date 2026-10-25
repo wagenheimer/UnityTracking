@@ -1,0 +1,20 @@
+{
+    "name": "Wagenheimer.Tracking",
+    "rootNamespace": "Wagenheimer.Tracking",
+    "references": [
+        "Unity.Advertisement.IosSupport"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [
+        "WebGL",
+        "Lumin",
+        "Switch"
+    ],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

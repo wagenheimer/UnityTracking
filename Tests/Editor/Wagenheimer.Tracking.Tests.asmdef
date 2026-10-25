@@ -1,0 +1,23 @@
+{
+    "name": "Wagenheimer.Tracking.Tests",
+    "rootNamespace": "Wagenheimer.Tracking.Tests",
+    "references": [
+        "Wagenheimer.Tracking",
+        "Wagenheimer.Tracking.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
