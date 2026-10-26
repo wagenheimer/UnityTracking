@@ -12,8 +12,6 @@ namespace Wagenheimer.Tracking.Editor
     /// </summary>
     internal sealed class TrackingCheckerWindow : EditorWindow
     {
-        internal const string MenuPath = "Tools/Wagenheimer/Tracking/Tracking Checker...";
-
         private static readonly Color ColorPass = new Color(0.298f, 0.851f, 0.392f);
         private static readonly Color ColorWarn = new Color(0.984f, 0.749f, 0.141f);
         private static readonly Color ColorFail = new Color(0.937f, 0.325f, 0.314f);
@@ -26,7 +24,11 @@ namespace Wagenheimer.Tracking.Editor
         private VisualElement body;
         private Label summary;
 
-        [MenuItem(MenuPath, priority = 120)]
+        /// <summary>
+        /// Opened through <see cref="TrackingMenuItems"/> so the menu entry is declared in exactly
+        /// one place. Declaring the same MenuItem path here as well made Unity log
+        /// "Cannot add menu item ... because a menu item with the same name already exists".
+        /// </summary>
         internal static void Open()
         {
             var window = GetWindow<TrackingCheckerWindow>();
