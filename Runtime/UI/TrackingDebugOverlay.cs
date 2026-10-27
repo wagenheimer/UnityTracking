@@ -294,7 +294,14 @@ namespace Wagenheimer.Tracking
 
         private VisualElement BuildFloatingButton()
         {
-            var button = new Button(() => SetOpen(true)) { text = "TRACK DBG" };
+            var button = new Button(() => SetOpen(true))
+            {
+                text = "TRACK DBG",
+                // Dev overlay: a gamepad Submit focuses the first focusable element in the panel and
+                // activates it, so a focusable pill opened this overlay with any controller button
+                // even with the cursor somewhere else. Pointer clicks keep working.
+                focusable = false
+            };
             button.style.position = Position.Absolute;
             button.style.left = 18;
             button.style.top = 18;
