@@ -2,7 +2,7 @@
 
 [![Unity](https://img.shields.io/badge/Unity-2022.3%2B-black?logo=unity)](https://unity.com)
 [![Platform](https://img.shields.io/badge/platform-iOS-blue?logo=apple)](https://developer.apple.com/documentation/apptrackingtransparency)
-[![Version](https://img.shields.io/badge/version-0.1.0-brightgreen.svg)](package.json)
+[![Version](https://img.shields.io/github/v/tag/wagenheimer/UnityTracking?label=version&color=brightgreen)](https://github.com/wagenheimer/UnityTracking/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Install](https://img.shields.io/badge/install-Git%20URL-orange)](#installation)
 
@@ -64,7 +64,7 @@ https://github.com/wagenheimer/UnityTracking.git
 Pin a release:
 
 ```
-https://github.com/wagenheimer/UnityTracking.git#v0.1.0
+https://github.com/wagenheimer/UnityTracking.git#v0.1.4
 ```
 
 Requirements:
