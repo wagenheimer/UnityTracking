@@ -1,6 +1,6 @@
 {
   "name": "com.wagenheimer.tracking",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "displayName": "Tracking Helper",
   "description": "App Tracking Transparency (ATT) for iOS with a single owner: runtime consent gate, native status probe, request history and re-request, an Info.plist build processor, an automated project checker and a UI Toolkit runtime debug overlay. Integrates with ad SDKs by waiting for the ATT answer before they read the advertising identifier.",
   "unity": "2022.3",
