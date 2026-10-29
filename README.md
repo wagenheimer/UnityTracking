@@ -64,7 +64,7 @@ https://github.com/wagenheimer/UnityTracking.git
 Pin a release:
 
 ```
-https://github.com/wagenheimer/UnityTracking.git#v0.1.4
+https://github.com/wagenheimer/UnityTracking.git#vX.Y.Z
 ```
 
 Requirements:
