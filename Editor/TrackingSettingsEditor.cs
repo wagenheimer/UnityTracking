@@ -45,6 +45,23 @@ namespace Wagenheimer.Tracking.Editor
                     string.IsNullOrWhiteSpace(settings.PurposeString) ? MessageType.Error : MessageType.Warning);
             }
 
+            if (settings.RequireTracking)
+            {
+                EditorGUILayout.HelpBox(
+                    "ATT is mandatory in this project (requireTracking). A failing mandatory item blocks the " +
+                    "iOS build, and the checker reports FAIL instead of WARN.\n" +
+                    "Mandatory items: purpose string, build safety, the project requirements " +
+                    "(TrackingRequirements) and the single-owner rules (plist key and ATT request).",
+                    MessageType.Info);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "ATT is advisory in this project. Turn on 'Require Tracking' to block the iOS build " +
+                    "while a mandatory item fails.",
+                    MessageType.None);
+            }
+
             EditorGUILayout.Space(4);
 
             using (new EditorGUILayout.HorizontalScope())

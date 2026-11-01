@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -69,6 +70,34 @@ namespace Wagenheimer.Tracking.Editor
                     $"This iOS build declares tracking but the native diagnostics plugin is missing ({TrackingPackageInfo.NativePluginPath}).",
                     settings);
             }
+
+            EnforceMandatoryRequirements(settings);
+        }
+
+        /// <summary>
+        /// When the project marks ATT as mandatory (<see cref="TrackingSettings.RequireTracking"/>), a
+        /// failing checker item blocks the build instead of shipping a broken declaration or a second
+        /// owner of the permission. This is the release gate, so it ignores
+        /// <c>failBuildOnInvalidConfiguration</c>.
+        /// </summary>
+        private static void EnforceMandatoryRequirements(TrackingSettings settings)
+        {
+            if (!settings.RequireTracking)
+                return;
+
+            var failures = TrackingChecker.MandatoryFailures();
+            if (failures.Count == 0)
+                return;
+
+            var builder = new StringBuilder();
+            builder.AppendLine($"[Tracking] Build blocked: ATT is mandatory (requireTracking) and {failures.Count} item(s) fail the checker.");
+
+            foreach (var item in failures)
+                builder.AppendLine($"  - {item.Title}: {item.Detail}");
+
+            builder.AppendLine("Run Tools > Wagenheimer > Tracking > Tracking Checker... to see every item and the one-click fixes.");
+
+            throw new BuildFailedException(builder.ToString());
         }
 
         public void OnPostprocessBuild(BuildReport report)

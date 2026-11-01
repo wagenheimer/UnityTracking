@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-01
+
+### Added
+- `TrackingSettings.requireTracking`: marks ATT as a release requirement. The checker reports **FAIL**
+  instead of **WARN** for the mandatory items and the iOS pre-build step blocks the build while any of
+  them fails (it ignores `failBuildOnInvalidConfiguration`, because this is the release gate).
+- `TrackingRequirements` editor API: the game registers a provider with
+  `TrackingRequirements.SetProvider(...)` and returns one `TrackingRequirement` per rule (for example
+  "every iOS build profile that ships ads must apply `FTDOTD_TRACKING`"). The provider result feeds the
+  checker, the report, the AI prompt and the build gate, so the package stays ad-SDK agnostic.
+- Checker section **Mandatory**: policy switch, project requirements and the two single-owner scans.
+- Single-owner scans: the checker now reads the project's own scripts (`Assets/**/*.cs`, comments
+  ignored) and fails when anything outside the package writes `NSUserTrackingUsageDescription` or calls
+  the ATT request API (`ATTrackingStatusBinding`, `ATTrackingManager`, `RequestAuthorizationTracking`).
+- `TrackingChecker.ApplyIosScriptingDefine()` / one-click fix for `ScriptingDefine` mode.
+- Runtime: `TrackingDiagnostics` adds a **Mandatory policy** error when the project requires ATT but the
+  app bundle has no purpose string, and the reports print `policy=MANDATORY|advisory`.
+- Tests for the provider API.
+
+### Changed
+- Checker report prints `ATT requirement: MANDATORY|advisory` and counts mandatory failures.
+- Settings inspector explains the mandatory policy and its consequences.
+
 ## [0.1.5] - 2026-10-29
 
 ### Changed

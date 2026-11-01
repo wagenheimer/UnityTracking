@@ -26,6 +26,7 @@ A single, reusable owner for **App Tracking Transparency (ATT)** in Unity iOS bu
 - [Runtime API](#runtime-api)
 - [Build Processor](#build-processor)
 - [Editor Checker](#editor-checker)
+- [Mandatory mode (single source of truth)](#mandatory-mode-single-source-of-truth)
 - [Runtime Debug Overlay](#runtime-debug-overlay)
 - [Integrating with an ad SDK](#integrating-with-an-ad-sdk)
 - [Testing / QA](#testing--qa)
@@ -120,6 +121,7 @@ Without an asset the package uses safe defaults and logs a warning.
 | `scriptingDefine` | Define inspected by `ScriptingDefine` mode (e.g. `FTDOTD_TRACKING`). |
 | `requirementMode` | Runtime requirement: `Auto` (plist key present), `ForceRequired` (QA), `ForceNotRequired`. |
 | `requestOnBoot` | `true`: request when the status is `NotDetermined`. `false`: only read the status. |
+| `requireTracking` | Marks ATT as a **release requirement**: the checker fails (not warns) and the iOS pre-build blocks the build while a mandatory item fails. See [Mandatory mode](#mandatory-mode-single-source-of-truth). |
 
 ### iOS Info.plist
 
@@ -222,7 +224,9 @@ The overlay explains this and offers **Open app settings**.
 - **Pre-build** (`callbackOrder 1001`): when the target is iOS and the build declares tracking,
   validates the purpose string, the iOS support package and the native plugin. With
   `failBuildOnInvalidConfiguration` a missing purpose string fails the build instead of shipping
-  an ATT request that iOS silently ignores.
+  an ATT request that iOS silently ignores. When `requireTracking` is on, every mandatory checker
+  item (project requirements, single-owner rules, build safety) blocks the build regardless of
+  `failBuildOnInvalidConfiguration`.
 - **Post-build** (`callbackOrder 1001`, after SDK processors): writes or removes
   `NSUserTrackingUsageDescription` from the generated `Info.plist`, verifies the result, and
   records `Library/Wagenheimer.Tracking/last-build.json` for the checker.
@@ -238,16 +242,64 @@ project can ship a Free build that declares tracking and a Full build that does 
 
 Sections:
 
-1. **Configuration** — settings asset, master switch, declaration mode/define, purpose string,
+1. **Mandatory** — the policy switch (`requireTracking`), the project requirements registered through
+   `TrackingRequirements.SetProvider(...)` and the two single-owner scans (plist key and ATT request).
+2. **Configuration** — settings asset, master switch, declaration mode/define, purpose string,
    build safety, timing and overlay values.
-2. **iOS readiness** — `com.unity.ads.ios-support`, native plugin, minimum iOS version.
-3. **Last build** — reads `last-build.json` and verifies the generated `Info.plist` key and the
+3. **iOS readiness** — `com.unity.ads.ios-support`, native plugin, minimum iOS version.
+4. **Last build** — reads `last-build.json` and verifies the generated `Info.plist` key and the
    `AppTrackingTransparency.framework` link. You can also point it at any build folder.
-4. **Integration** — detects the LevelPlay Helper prefab and warns when its own ATT request is
+5. **Integration** — detects the LevelPlay Helper prefab and warns when its own ATT request is
    still enabled (double owner), with a one-click fix.
-5. **Runtime** — how to validate on device.
+6. **Runtime** — how to validate on device.
 
 Each finding can be copied (report) and, when it fails, comes with a ready-to-paste AI prompt.
+
+### Mandatory mode (single source of truth)
+
+Two rules are enforced everywhere (checker, CI, build):
+
+1. **One writer** — only this package writes `NSUserTrackingUsageDescription`.
+2. **One requester** — only this package calls the ATT request.
+
+With `requireTracking` on, a violation becomes a **FAIL**, the iOS build is blocked before compiling
+and `TrackingCheckerCli` exits with an error. With it off, the same findings are warnings, so the
+package can be adopted gradually.
+
+The active build target only knows the defines currently applied, which is not enough for projects
+that build several profiles from one project (a Free profile that ships ads and declares tracking, a
+Full profile that ships nothing). Register the profile truth from the game:
+
+```csharp
+using System.Linq;
+using UnityEditor;
+using Wagenheimer.Tracking.Editor;
+
+static class TrackingBuildRequirements
+{
+    [InitializeOnLoadMethod]
+    static void Register() => TrackingRequirements.SetProvider(Evaluate);
+
+    static IEnumerable<TrackingRequirement> Evaluate()
+    {
+        foreach (var profile in IosProfiles())   // read ProjectBuildConfig / your own config
+        {
+            bool shipsAds = profile.defines.Contains("FTDOTD_MONETIZATION");
+            bool declares = profile.defines.Contains("FTDOTD_TRACKING");
+
+            yield return new TrackingRequirement(
+                $"{profile.displayName}: ATT",
+                shipsAds && declares ? TrackingRequirementStatus.Pass : TrackingRequirementStatus.Fail,
+                shipsAds
+                    ? "Ships ads, so the build must declare tracking and carry the purpose string."
+                    : "Full build: no ads, no ATT (the key is removed).");
+        }
+    }
+}
+```
+
+The provider runs on every checker refresh and again before each iOS build, so a new profile that
+forgets the define is caught before the store build.
 
 ### CI
 
@@ -338,6 +390,7 @@ Runtime/
   Plugins/iOS/WagenheimerTracking.mm
 Editor/
   TrackingChecker.cs        Checks model + report/prompt (shared with CI)
+  TrackingRequirements.cs   Public API for project-supplied requirements (build profiles)
   TrackingCheckerCli.cs     Batch-mode entry point (exit 1 on failures)
   TrackingCheckerWindow.cs  UI Toolkit window
   TrackingBuildProcessor.cs Pre/post build (Info.plist)
@@ -348,6 +401,7 @@ Editor/
 Tests/Editor/
   TrackingDeclarationTests.cs
   TrackingCheckerTests.cs
+  TrackingRequirementsTests.cs
 ```
 
 ---

@@ -16,6 +16,7 @@ namespace Wagenheimer.Tracking.Tests
                 Assert.AreEqual(TrackingDeclarationMode.ScriptingDefine, settings.DeclarationMode);
                 Assert.AreEqual(TrackingSettings.DefaultDefine, settings.ScriptingDefine);
                 Assert.AreEqual(TrackingRequirementMode.Auto, settings.RequirementMode);
+                Assert.IsFalse(settings.RequireTracking);
                 Assert.IsTrue(settings.HasUsablePurposeString);
                 Assert.IsTrue(settings.FailBuildOnInvalidConfiguration);
                 Assert.GreaterOrEqual(settings.InitialDelaySeconds, 0f);

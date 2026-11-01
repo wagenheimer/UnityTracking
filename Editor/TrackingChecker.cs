@@ -28,6 +28,12 @@ namespace Wagenheimer.Tracking.Editor
         public string ActionLabel;
         public Action Action;
 
+        /// <summary>
+        /// True when the item is a release requirement: a failure blocks the iOS build (pre-build gate)
+        /// and makes the CLI exit with an error code.
+        /// </summary>
+        public bool Mandatory;
+
         public CheckResult WithFacts(params string[] facts)
         {
             Facts.AddRange(facts);
@@ -62,27 +68,51 @@ namespace Wagenheimer.Tracking.Editor
             var settings = FindSettings(out bool settingsExists, out string settingsPath);
             var sections = new List<Section>
             {
+                BuildMandatorySection(settings, settingsExists, settingsPath),
                 BuildConfigurationSection(settings, settingsExists, settingsPath),
                 BuildIosSection(settings),
                 BuildLastBuildSection(settings),
-                BuildIntegrationSection(),
+                BuildIntegrationSection(settings),
                 BuildRuntimeSection(settings)
             };
 
             return sections;
         }
 
+        /// <summary>
+        /// Mandatory failures only. The build processor calls this before an iOS build so a release
+        /// cannot ship with a broken ATT declaration or with a second owner of the permission.
+        /// </summary>
+        internal static List<CheckResult> MandatoryFailures()
+        {
+            var failures = new List<CheckResult>();
+
+            foreach (var section in Run())
+            {
+                foreach (var item in section.Items)
+                {
+                    if (item.Mandatory && item.Status == CheckStatus.Fail)
+                        failures.Add(item);
+                }
+            }
+
+            return failures;
+        }
+
         internal static string BuildReport(List<Section> sections)
         {
+            var settings = FindSettings(out bool settingsExists, out _);
             var builder = new StringBuilder(3200);
             builder.AppendLine("===== TRACKING HELPER CHECKER =====");
             builder.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             builder.AppendLine($"Package: {TrackingPackageInfo.PackageName} {TrackingPackageInfo.Version}");
             builder.AppendLine($"Unity: {Application.unityVersion}");
             builder.AppendLine($"Active target: {EditorUserBuildSettings.activeBuildTarget}");
+            builder.AppendLine($"ATT requirement: {(settings.RequireTracking ? "MANDATORY (build is blocked on failures)" : "advisory")}" +
+                               (settingsExists ? string.Empty : " — no settings asset, using defaults"));
             builder.AppendLine();
 
-            int pass = 0, warn = 0, fail = 0;
+            int pass = 0, warn = 0, fail = 0, mandatoryFail = 0;
 
             foreach (var section in sections)
             {
@@ -93,10 +123,14 @@ namespace Wagenheimer.Tracking.Editor
                     {
                         case CheckStatus.Pass: pass++; break;
                         case CheckStatus.Warning: warn++; break;
-                        case CheckStatus.Fail: fail++; break;
+                        case CheckStatus.Fail:
+                            fail++;
+                            if (item.Mandatory) mandatoryFail++;
+                            break;
                     }
 
-                    builder.AppendLine($"  [{Label(item.Status)}] {item.Title}: {item.Detail}");
+                    string tag = item.Mandatory && item.Status == CheckStatus.Fail ? " [MANDATORY]" : string.Empty;
+                    builder.AppendLine($"  [{Label(item.Status)}] {item.Title}: {item.Detail}{tag}");
                     foreach (var fact in item.Facts)
                         builder.AppendLine($"      - {fact}");
                 }
@@ -104,7 +138,8 @@ namespace Wagenheimer.Tracking.Editor
                 builder.AppendLine();
             }
 
-            builder.AppendLine($"SUMMARY: {pass} pass, {warn} warning(s), {fail} fail(s)");
+            builder.AppendLine($"SUMMARY: {pass} pass, {warn} warning(s), {fail} fail(s)" +
+                               (mandatoryFail > 0 ? $" — {mandatoryFail} mandatory" : string.Empty));
             return builder.ToString();
         }
 
@@ -159,6 +194,171 @@ namespace Wagenheimer.Tracking.Editor
         }
 
         // ── Sections ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Release requirements: the policy switch, the project-supplied requirements (build profiles)
+        /// and the single-owner rules. Everything here is mandatory when the settings mark ATT as
+        /// required, and blocks the iOS build through <see cref="MandatoryFailures"/>.
+        /// </summary>
+        private static Section BuildMandatorySection(
+            TrackingSettings settings, bool settingsExists, string settingsPath)
+        {
+            var section = new Section
+            {
+                Title = "Mandatory",
+                Description = settings.RequireTracking
+                    ? "ATT is a release requirement: any FAIL here blocks the iOS build and the CI check."
+                    : "ATT is advisory in this project (requireTracking off): the findings below are warnings."
+            };
+
+            var policy = new CheckResult
+            {
+                Title = "ATT is mandatory",
+                Status = settings.RequireTracking ? CheckStatus.Pass : CheckStatus.Info,
+                Detail = settings.RequireTracking
+                    ? "requireTracking is on. The checker fails and the pre-build step blocks the iOS build while a mandatory item fails."
+                    : "requireTracking is off. Turn it on to fail the checker and block the iOS build when ATT is not configured.",
+                Mandatory = settings.RequireTracking
+            };
+
+            if (!settings.RequireTracking)
+            {
+                policy.ActionLabel = settingsExists ? "Open settings" : "Create settings";
+                policy.Action = settingsExists ? () => OpenSettingsAsset(settingsPath) : CreateSettingsAsset;
+            }
+
+            section.Items.Add(policy);
+
+            if (settings.RequireTracking && !settingsExists)
+            {
+                section.Items.Add(new CheckResult
+                {
+                    Title = "Settings asset",
+                    Status = CheckStatus.Fail,
+                    Detail = "ATT is mandatory but there is no TrackingSettings asset; the package is running on defaults.",
+                    Mandatory = true,
+                    ActionLabel = "Create",
+                    Action = CreateSettingsAsset
+                });
+            }
+
+            AddRequirementItems(section, settings);
+            AddSingleOwnerItems(section, settings);
+
+            return section;
+        }
+
+        private static void AddRequirementItems(Section section, TrackingSettings settings)
+        {
+            bool required = settings.RequireTracking;
+
+            if (!TrackingRequirements.HasProvider)
+            {
+                section.Items.Add(new CheckResult
+                {
+                    Title = "Project requirements",
+                    Status = required ? CheckStatus.Warning : CheckStatus.Info,
+                    Detail = "No provider registered. Call TrackingRequirements.SetProvider(...) from an editor " +
+                             "script to validate the build profiles (for example: every iOS profile that ships ads " +
+                             "must declare tracking).",
+                    Mandatory = false
+                });
+                return;
+            }
+
+            var requirements = TrackingRequirements.Evaluate();
+
+            if (requirements.Count == 0)
+            {
+                section.Items.Add(new CheckResult
+                {
+                    Title = "Project requirements",
+                    Status = required ? CheckStatus.Warning : CheckStatus.Info,
+                    Detail = "The registered provider returned no requirements.",
+                    Mandatory = false
+                });
+                return;
+            }
+
+            foreach (var requirement in requirements)
+            {
+                CheckStatus status = ToCheckStatus(requirement.Status);
+
+                // A provider failure only blocks the build when the project marks ATT as mandatory.
+                if (!required && status == CheckStatus.Fail)
+                    status = CheckStatus.Warning;
+
+                var item = new CheckResult
+                {
+                    Title = requirement.Title,
+                    Status = status,
+                    Detail = requirement.Detail,
+                    Mandatory = required && requirement.Status == TrackingRequirementStatus.Fail,
+                    ActionLabel = requirement.FixLabel,
+                    Action = requirement.Fix
+                };
+
+                foreach (var fact in requirement.Facts)
+                    item.Facts.Add(fact);
+
+                section.Items.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// Enforces the "two owners" rule: only the tracking package may write the purpose string or
+        /// request ATT. Project scripts that do either are reported with file and line.
+        /// </summary>
+        private static void AddSingleOwnerItems(Section section, TrackingSettings settings)
+        {
+            bool required = settings.RequireTracking;
+            CheckStatus problem = required ? CheckStatus.Fail : CheckStatus.Warning;
+
+            var plistWriters = PlistWriterHits();
+
+            var writerItem = new CheckResult
+            {
+                Title = "Single owner — Info.plist key",
+                Status = plistWriters.Count == 0 ? CheckStatus.Pass : problem,
+                Detail = plistWriters.Count == 0
+                    ? "Only the tracking package writes NSUserTrackingUsageDescription."
+                    : $"{plistWriters.Count} project script line(s) write or mention the key outside the package; " +
+                      "the package must be the only writer.",
+                Mandatory = required
+            };
+
+            if (plistWriters.Count > 0)
+            {
+                writerItem.ActionLabel = "Open first";
+                writerItem.Action = () => OpenHit(plistWriters[0]);
+                foreach (var hit in plistWriters.GetRange(0, Math.Min(3, plistWriters.Count)))
+                    writerItem.Facts.Add(hit.ToString());
+            }
+
+            section.Items.Add(writerItem);
+
+            var requesters = AttRequesterHits();
+
+            var requesterItem = new CheckResult
+            {
+                Title = "Single owner — ATT request",
+                Status = requesters.Count == 0 ? CheckStatus.Pass : problem,
+                Detail = requesters.Count == 0
+                    ? "No project script requests ATT outside the package."
+                    : $"{requesters.Count} project script line(s) request ATT or use ATTrackingManager outside the package.",
+                Mandatory = required
+            };
+
+            if (requesters.Count > 0)
+            {
+                requesterItem.ActionLabel = "Open first";
+                requesterItem.Action = () => OpenHit(requesters[0]);
+                foreach (var hit in requesters.GetRange(0, Math.Min(3, requesters.Count)))
+                    requesterItem.Facts.Add(hit.ToString());
+            }
+
+            section.Items.Add(requesterItem);
+        }
 
         private static Section BuildConfigurationSection(
             TrackingSettings settings, bool settingsExists, string settingsPath)
@@ -224,6 +424,24 @@ namespace Wagenheimer.Tracking.Editor
                 declaration.Detail += " (expected for builds that do not declare tracking)";
             }
 
+            if (settings.RequireTracking && settings.Enabled && !declares)
+            {
+                // With a provider the build profiles own the truth (a Free profile declares tracking and a
+                // Full profile does not), so the active-target define alone is not a failure.
+                if (TrackingRequirements.HasProvider)
+                {
+                    declaration.Status = CheckStatus.Info;
+                    declaration.Detail += " Profile-level truth comes from the project requirements above.";
+                }
+                else
+                {
+                    declaration.Status = CheckStatus.Fail;
+                    declaration.Mandatory = true;
+                    declaration.ActionLabel = "Apply define to iOS";
+                    declaration.Action = () => ApplyIosScriptingDefine();
+                }
+            }
+
             section.Items.Add(declaration);
 
             string purposeIssue = ValidatePurposeString(settings.PurposeString);
@@ -231,7 +449,7 @@ namespace Wagenheimer.Tracking.Editor
             if (string.IsNullOrWhiteSpace(settings.PurposeString))
                 purposeStatus = CheckStatus.Fail;
             else if (purposeIssue != null)
-                purposeStatus = CheckStatus.Warning;
+                purposeStatus = settings.RequireTracking ? CheckStatus.Fail : CheckStatus.Warning;
             else
                 purposeStatus = CheckStatus.Pass;
 
@@ -241,7 +459,8 @@ namespace Wagenheimer.Tracking.Editor
                 Status = purposeStatus,
                 Detail = purposeStatus == CheckStatus.Pass
                     ? $"\"{settings.PurposeString}\""
-                    : purposeIssue
+                    : purposeIssue,
+                Mandatory = settings.RequireTracking
             }.WithFacts(
                 $"Chars: {settings.PurposeString.Length}",
                 "Written to NSUserTrackingUsageDescription only for builds that declare tracking."));
@@ -249,10 +468,15 @@ namespace Wagenheimer.Tracking.Editor
             section.Items.Add(new CheckResult
             {
                 Title = "Build safety",
-                Status = settings.FailBuildOnInvalidConfiguration ? CheckStatus.Pass : CheckStatus.Warning,
+                Status = settings.FailBuildOnInvalidConfiguration
+                    ? CheckStatus.Pass
+                    : settings.RequireTracking ? CheckStatus.Fail : CheckStatus.Warning,
                 Detail = settings.FailBuildOnInvalidConfiguration
                     ? "A build that declares tracking without a valid purpose string fails before compiling."
-                    : "Invalid configurations only log a warning. A broken ATT build can be shipped.",
+                    : settings.RequireTracking
+                        ? "Invalid configurations only log a warning, so a broken ATT build can be shipped even though ATT is mandatory here."
+                        : "Invalid configurations only log a warning. A broken ATT build can be shipped.",
+                Mandatory = settings.RequireTracking,
                 ActionLabel = "Fix",
                 Action = () => OpenSettingsAsset(settingsPath)
             });
@@ -428,7 +652,7 @@ namespace Wagenheimer.Tracking.Editor
             return section;
         }
 
-        private static Section BuildIntegrationSection()
+        private static Section BuildIntegrationSection(TrackingSettings settings)
         {
             var section = new Section
             {
@@ -466,10 +690,13 @@ namespace Wagenheimer.Tracking.Editor
             section.Items.Add(new CheckResult
             {
                 Title = "LevelPlay ATT request",
-                Status = requestOn ? CheckStatus.Warning : CheckStatus.Pass,
+                Status = requestOn
+                    ? settings.RequireTracking ? CheckStatus.Fail : CheckStatus.Warning
+                    : CheckStatus.Pass,
                 Detail = requestOn
                     ? "The helper is still configured to request ATT — two owners request the same permission and the second request is a no-op (or an unexpected prompt)."
                     : "The helper's own ATT request is disabled; this package is the single owner.",
+                Mandatory = settings.RequireTracking,
                 ActionLabel = requestOn ? "Disable on prefab" : null,
                 Action = requestOn ? () => DisableLevelPlayRequest(prefabPath) : null
             }.WithFacts(prefabPath));
@@ -524,6 +751,173 @@ namespace Wagenheimer.Tracking.Editor
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
+
+        private static CheckStatus ToCheckStatus(TrackingRequirementStatus status) => status switch
+        {
+            TrackingRequirementStatus.Pass => CheckStatus.Pass,
+            TrackingRequirementStatus.Warning => CheckStatus.Warning,
+            TrackingRequirementStatus.Fail => CheckStatus.Fail,
+            _ => CheckStatus.Info
+        };
+
+        private static readonly Regex AttRequestPattern = new Regex(
+            @"\bRequestAuthorizationTracking\s*\(|\bRequestTrackingAuthorization\s*\(|\bATTrackingManager\b|\bATTrackingStatusBinding\b",
+            RegexOptions.Compiled);
+
+        private static bool IsAttRequestLine(string line) =>
+            !string.IsNullOrEmpty(line) && AttRequestPattern.IsMatch(line);
+
+        private sealed class ScriptHit
+        {
+            public ScriptHit(string path, int line, string text)
+            {
+                Path = path;
+                Line = line;
+                Text = text;
+            }
+
+            public string Path { get; }
+            public int Line { get; }
+            public string Text { get; }
+
+            public override string ToString() => $"{Path}:{Line} — {Text}";
+        }
+
+        private sealed class ProjectScan
+        {
+            public readonly List<ScriptHit> PlistWriters = new List<ScriptHit>();
+            public readonly List<ScriptHit> AttRequesters = new List<ScriptHit>();
+            public double Timestamp;
+        }
+
+        private const double ScanCacheSeconds = 10d;
+        private static ProjectScan scanCache;
+
+        /// <summary>
+        /// Scans the project's own scripts (not packages, not Library) so the checker can prove that the
+        /// package is the only owner of the plist key and of the ATT request. Cached for a minute because
+        /// some projects carry thousands of scripts.
+        /// </summary>
+        private static ProjectScan GetProjectScan()
+        {
+            if (scanCache != null &&
+                EditorApplication.timeSinceStartup - scanCache.Timestamp < ScanCacheSeconds)
+            {
+                return scanCache;
+            }
+
+            var scan = new ProjectScan();
+            string assetsRoot = Application.dataPath;
+            string projectRoot = Directory.GetParent(assetsRoot)?.FullName ?? assetsRoot;
+
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(assetsRoot, "*.cs", SearchOption.AllDirectories);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Tracking] Could not scan the project scripts: {exception.Message}");
+                scan.Timestamp = EditorApplication.timeSinceStartup;
+                scanCache = scan;
+                return scan;
+            }
+
+            foreach (string file in files)
+            {
+                if (IsInsidePackage(file))
+                    continue;
+
+                string assetPath;
+                try
+                {
+                    assetPath = file.Substring(projectRoot.Length).TrimStart('\\', '/').Replace('\\', '/');
+                }
+                catch (Exception)
+                {
+                    assetPath = file;
+                }
+
+                try
+                {
+                    int lineNumber = 0;
+                    foreach (string rawLine in File.ReadLines(file))
+                    {
+                        lineNumber++;
+
+                        string line = rawLine.TrimStart();
+                        if (line.Length == 0)
+                            continue;
+
+                        // Skip comments: the rule is about code that writes/requests, and the project's
+                        // own documentation about the key must not be reported as a second owner.
+                        if (line.StartsWith("//", StringComparison.Ordinal) ||
+                            line.StartsWith("*", StringComparison.Ordinal) ||
+                            line.StartsWith("/*", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        if (line.IndexOf("NSUserTrackingUsageDescription", StringComparison.Ordinal) >= 0)
+                            scan.PlistWriters.Add(new ScriptHit(assetPath, lineNumber, line.Trim()));
+
+                        if (IsAttRequestLine(line))
+                            scan.AttRequesters.Add(new ScriptHit(assetPath, lineNumber, line.Trim()));
+                    }
+                }
+                catch (Exception)
+                {
+                    // Unreadable/generated file: skip it, the checker must never fail because of I/O.
+                }
+            }
+
+            scan.Timestamp = EditorApplication.timeSinceStartup;
+            scanCache = scan;
+            return scan;
+        }
+
+        private static bool IsInsidePackage(string file)
+        {
+            try
+            {
+                string packageRoot = Path.GetFullPath(TrackingPackageInfo.PackagePath);
+                return Path.GetFullPath(file).StartsWith(packageRoot, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static List<ScriptHit> PlistWriterHits() => GetProjectScan().PlistWriters;
+
+        private static List<ScriptHit> AttRequesterHits() => GetProjectScan().AttRequesters;
+
+        private static void OpenHit(ScriptHit hit)
+        {
+            var script = AssetDatabase.LoadAssetAtPath<MonoScript>(hit.Path);
+            if (script != null)
+                AssetDatabase.OpenAsset(script, hit.Line);
+        }
+
+        /// <summary>Adds the configured define to the iOS target (one-click fix for ScriptingDefine mode).</summary>
+        internal static bool ApplyIosScriptingDefine()
+        {
+            var settings = FindSettings(out _, out _);
+            var target = NamedBuildTarget.iOS;
+
+            string current = PlayerSettings.GetScriptingDefineSymbols(target);
+            if (HasDefine(current, settings.ScriptingDefine))
+                return false;
+
+            string updated = string.IsNullOrWhiteSpace(current)
+                ? settings.ScriptingDefine
+                : current.TrimEnd(';') + ";" + settings.ScriptingDefine;
+
+            PlayerSettings.SetScriptingDefineSymbols(target, updated);
+            Debug.Log($"[Tracking] Added '{settings.ScriptingDefine}' to the iOS scripting defines.");
+            return true;
+        }
 
         internal static TrackingSettings FindSettings(out bool exists, out string path)
         {

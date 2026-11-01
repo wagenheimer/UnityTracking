@@ -69,6 +69,7 @@ namespace Wagenheimer.Tracking
             public bool Enabled;
             public TrackingDeclarationMode DeclarationMode;
             public TrackingRequirementMode RequirementMode;
+            public bool RequireTracking;
             public bool Required;
             public bool CanRequest;
             public bool FrameworkAvailable;
@@ -245,6 +246,7 @@ namespace Wagenheimer.Tracking
                 Enabled = settings.Enabled,
                 DeclarationMode = settings.DeclarationMode,
                 RequirementMode = settings.RequirementMode,
+                RequireTracking = settings.RequireTracking,
                 Required = TrackingConsent.IsRequired,
                 CanRequest = TrackingConsent.CanRequest,
                 FrameworkAvailable = IsFrameworkAvailable,
@@ -323,6 +325,13 @@ namespace Wagenheimer.Tracking
                 checks.Add(new Check("Requirement override", CheckStatus.Error,
                     "ForceRequired is set but the app bundle has no NSUserTrackingUsageDescription.",
                     "Disable the override or fix the build so the purpose string is written."));
+
+            if (att.RequireTracking && Application.platform == RuntimePlatform.IPhonePlayer && !att.HasPurposeString)
+                checks.Add(new Check("Mandatory policy", CheckStatus.Error,
+                    "This project marks ATT as mandatory (requireTracking), but the app bundle has no " +
+                    "NSUserTrackingUsageDescription, so the request is blocked and the store declaration is wrong.",
+                    "Fix the build profile/define in the checker and rebuild: the package writes the key and the " +
+                    "pre-build step blocks a build that would ship without it."));
 
             if (Application.platform != RuntimePlatform.IPhonePlayer)
             {
@@ -519,7 +528,7 @@ namespace Wagenheimer.Tracking
             builder.AppendLine($"Platform: {Application.platform} | {SystemInfo.operatingSystem} | {SystemInfo.deviceModel}");
             builder.AppendLine($"ATT: status={att.NativeStatus} | asked={(att.Answered ? "yes" : att.WasRequested ? "sent, no answer" : "no")} | attempts={att.RequestCount} | last={FormatLocal(att.LastRequestUtc)}");
             builder.AppendLine($"Declaration: {TrackingDeclaration.Describe(settings.Enabled, settings.DeclarationMode, settings.ScriptingDefine, att.HasPurposeString)}");
-            builder.AppendLine($"Requirement: required={att.Required} canRequest={att.CanRequest} mode={settings.RequirementMode}");
+            builder.AppendLine($"Requirement: required={att.Required} canRequest={att.CanRequest} mode={settings.RequirementMode} policy={(att.RequireTracking ? "MANDATORY" : "advisory")}");
             if (att.Blocked)
                 builder.AppendLine($"Blocked: {att.BlockedReason}");
             builder.AppendLine();
@@ -563,7 +572,7 @@ namespace Wagenheimer.Tracking
             builder.AppendLine($"App..............: {Application.identifier} v{Application.version} ({VersionOr(BundleBuildNumber)})");
             builder.AppendLine($"Package enabled..: {att.Enabled}");
             builder.AppendLine($"Declaration......: {settings.DeclarationMode} / define={settings.ScriptingDefine}");
-            builder.AppendLine($"Requirement......: {settings.RequirementMode} (required={att.Required}, canRequest={att.CanRequest})");
+            builder.AppendLine($"Requirement......: {settings.RequirementMode} (required={att.Required}, canRequest={att.CanRequest}, policy={(att.RequireTracking ? "MANDATORY" : "advisory")})");
             builder.AppendLine($"Framework........: {(att.FrameworkAvailable ? "available" : "unavailable")}");
             builder.AppendLine($"Purpose string...: {(att.HasPurposeString ? att.PurposeString : "(missing)")}");
             builder.AppendLine($"Native status....: {att.NativeStatus}");

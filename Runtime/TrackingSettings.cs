@@ -65,6 +65,11 @@ namespace Wagenheimer.Tracking
         [Tooltip("Request ATT on boot when the status is NotDetermined. Off only reads the status.")]
         [SerializeField] private bool requestOnBoot = true;
 
+        [Tooltip("Treat ATT as a mandatory release requirement. The checker and the iOS build fail when a build " +
+                 "that ships ads would not declare tracking, when the purpose string is invalid, or when another " +
+                 "component also requests ATT / writes the plist key. Off = every check is advisory.")]
+        [SerializeField] private bool requireTracking;
+
         // ── iOS Info.plist ───────────────────────────────────────────────────
         [Header("iOS Info.plist")]
         [Tooltip("Write NSUserTrackingUsageDescription into the generated Info.plist when the build declares tracking.")]
@@ -140,6 +145,12 @@ namespace Wagenheimer.Tracking
         public string ScriptingDefine => scriptingDefine;
         public TrackingRequirementMode RequirementMode => requirementMode;
         public bool RequestOnBoot => requestOnBoot;
+
+        /// <summary>
+        /// True when the project marks ATT as a release requirement: the checker reports failures (not
+        /// warnings) and the iOS build is blocked while the mandatory items are not satisfied.
+        /// </summary>
+        public bool RequireTracking => requireTracking;
         public bool WritePurposeString => writePurposeString;
         public string PurposeString => purposeString;
         public bool RemoveWhenNotDeclared => removeWhenNotDeclared;
