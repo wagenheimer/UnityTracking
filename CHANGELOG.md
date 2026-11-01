@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] - 2026-11-01
 
+### Added
+- Automatic **build-pipeline integration**: the checker now reads `ProjectBuildConfig` by asset type
+  (SerializedObject, no compile-time dependency) and reports one requirement per build profile. The
+  only configuration is `TrackingSettings.adsDefine`: a profile that applies that define ships ads, so
+  it must also apply `scriptingDefine`. Games no longer need a per-project editor script; projects
+  without the build pipeline simply see the rule skipped.
+- Honour the pipeline's removal syntax: a profile that lists `!DEFINE` / `-DEFINE` does not apply it.
+- Tests for the define matching.
+
+### Changed
+- The active-target declaration check defers to the profile rule only when the rule is actually active
+  (ads define set and a config asset present), instead of whenever a provider is registered.
+
 ## [0.2.0] - 2026-11-01
 
 ### Added

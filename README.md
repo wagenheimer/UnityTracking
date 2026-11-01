@@ -119,6 +119,7 @@ Without an asset the package uses safe defaults and logs a warning.
 | `enabled` | Master switch. Off = no request, no plist write, overlay reports N/A. |
 | `declarationMode` | `Never`, `Always` or `ScriptingDefine`. Decides whether a build declares tracking (and therefore whether the key is written). |
 | `scriptingDefine` | Define inspected by `ScriptingDefine` mode (e.g. `FTDOTD_TRACKING`). |
+| `adsDefine` | Build profile define that marks an ad-supported build (e.g. `FTDOTD_MONETIZATION`). When set, every iOS profile in `ProjectBuildConfig` that applies it must also apply `scriptingDefine`. Empty = profile rule off. |
 | `requirementMode` | Runtime requirement: `Auto` (plist key present), `ForceRequired` (QA), `ForceNotRequired`. |
 | `requestOnBoot` | `true`: request when the status is `NotDetermined`. `false`: only read the status. |
 | `requireTracking` | Marks ATT as a **release requirement**: the checker fails (not warns) and the iOS pre-build blocks the build while a mandatory item fails. See [Mandatory mode](#mandatory-mode-single-source-of-truth). |
@@ -268,38 +269,31 @@ package can be adopted gradually.
 
 The active build target only knows the defines currently applied, which is not enough for projects
 that build several profiles from one project (a Free profile that ships ads and declares tracking, a
-Full profile that ships nothing). Register the profile truth from the game:
+Full profile that ships nothing).
 
-```csharp
-using System.Linq;
-using UnityEditor;
-using Wagenheimer.Tracking.Editor;
+#### Build pipeline integration (no code)
 
-static class TrackingBuildRequirements
-{
-    [InitializeOnLoadMethod]
-    static void Register() => TrackingRequirements.SetProvider(Evaluate);
+If the project uses `com.wagenheimer.buildpipeline`, the package finds `ProjectBuildConfig` by asset
+type and validates every profile. The only configuration is in `TrackingSettings`:
 
-    static IEnumerable<TrackingRequirement> Evaluate()
-    {
-        foreach (var profile in IosProfiles())   // read ProjectBuildConfig / your own config
-        {
-            bool shipsAds = profile.defines.Contains("FTDOTD_MONETIZATION");
-            bool declares = profile.defines.Contains("FTDOTD_TRACKING");
+| Field | Meaning |
+|---|---|
+| `scriptingDefine` | define that means "this build declares ATT" (e.g. `FTDOTD_TRACKING`). |
+| `adsDefine` | define that means "this build ships ads" (e.g. `FTDOTD_MONETIZATION`). |
 
-            yield return new TrackingRequirement(
-                $"{profile.displayName}: ATT",
-                shipsAds && declares ? TrackingRequirementStatus.Pass : TrackingRequirementStatus.Fail,
-                shipsAds
-                    ? "Ships ads, so the build must declare tracking and carry the purpose string."
-                    : "Full build: no ads, no ATT (the key is removed).");
-        }
-    }
-}
-```
+A profile that applies `adsDefine` must also apply `scriptingDefine`. The pipeline's removal syntax
+counts as absent (`!FTDOTD_MONETIZATION` / `-FTDOTD_MONETIZATION`), so the same rule works for Full
+profiles that remove a define inherited from ProjectSettings.
 
-The provider runs on every checker refresh and again before each iOS build, so a new profile that
-forgets the define is caught before the store build.
+The rule is evaluated per profile, so iOS (Free) and iOS (Full) are checked independently, with a
+one-click fix that adds the tracking define to the offending profile. No editor script is needed, and
+projects without the build pipeline simply see the rule skipped.
+
+#### Custom requirements
+
+`TrackingRequirements.SetProvider(...)` remains available for rules that are not expressible as
+defines (bundle ids, store kits, remote config). The build-pipeline integration uses the same
+provider internally, so a custom provider replaces it.
 
 ### CI
 
@@ -391,6 +385,7 @@ Runtime/
 Editor/
   TrackingChecker.cs        Checks model + report/prompt (shared with CI)
   TrackingRequirements.cs   Public API for project-supplied requirements (build profiles)
+  TrackingBuildProfiles.cs  Automatic com.wagenheimer.buildpipeline integration (adsDefine rule)
   TrackingCheckerCli.cs     Batch-mode entry point (exit 1 on failures)
   TrackingCheckerWindow.cs  UI Toolkit window
   TrackingBuildProcessor.cs Pre/post build (Info.plist)
@@ -402,6 +397,7 @@ Tests/Editor/
   TrackingDeclarationTests.cs
   TrackingCheckerTests.cs
   TrackingRequirementsTests.cs
+  TrackingBuildProfilesTests.cs
 ```
 
 ---

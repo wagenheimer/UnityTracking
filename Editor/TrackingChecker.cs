@@ -273,8 +273,8 @@ namespace Wagenheimer.Tracking.Editor
                 section.Items.Add(new CheckResult
                 {
                     Title = "Project requirements",
-                    Status = required ? CheckStatus.Warning : CheckStatus.Info,
-                    Detail = "The registered provider returned no requirements.",
+                    Status = CheckStatus.Info,
+                    Detail = "The registered provider returned no requirements (nothing to enforce).",
                     Mandatory = false
                 });
                 return;
@@ -426,9 +426,9 @@ namespace Wagenheimer.Tracking.Editor
 
             if (settings.RequireTracking && settings.Enabled && !declares)
             {
-                // With a provider the build profiles own the truth (a Free profile declares tracking and a
-                // Full profile does not), so the active-target define alone is not a failure.
-                if (TrackingRequirements.HasProvider)
+                // With the build-pipeline rule active the profiles own the truth (a Free profile declares
+                // tracking and a Full profile does not), so the active-target define alone is not a failure.
+                if (TrackingBuildProfiles.IsActive)
                 {
                     declaration.Status = CheckStatus.Info;
                     declaration.Detail += " Profile-level truth comes from the project requirements above.";

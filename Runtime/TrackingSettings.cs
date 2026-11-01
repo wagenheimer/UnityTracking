@@ -59,6 +59,12 @@ namespace Wagenheimer.Tracking
         [Tooltip("Scripting define inspected by ScriptingDefine mode (iOS Free profile applies it).")]
         [SerializeField] private string scriptingDefine = DefaultDefine;
 
+        [Tooltip("Build profile define that marks an ad-supported build (e.g. FTDOTD_MONETIZATION). " +
+                 "When set, the checker reads ProjectBuildConfig (com.wagenheimer.buildpipeline) and requires " +
+                 "the tracking define on every iOS profile that applies this one — no project code involved. " +
+                 "Leave empty to disable the profile rule.")]
+        [SerializeField] private string adsDefine = string.Empty;
+
         [Tooltip("Runtime requirement. Auto uses the purpose string present in the app bundle.")]
         [SerializeField] private TrackingRequirementMode requirementMode = TrackingRequirementMode.Auto;
 
@@ -143,6 +149,12 @@ namespace Wagenheimer.Tracking
         public bool Enabled => enabled;
         public TrackingDeclarationMode DeclarationMode => declarationMode;
         public string ScriptingDefine => scriptingDefine;
+
+        /// <summary>
+        /// Build profile define that marks an ad-supported build. The checker uses it to require the
+        /// tracking define on every iOS profile that applies it. Empty = profile rule disabled.
+        /// </summary>
+        public string AdsDefine => string.IsNullOrWhiteSpace(adsDefine) ? string.Empty : adsDefine.Trim();
         public TrackingRequirementMode RequirementMode => requirementMode;
         public bool RequestOnBoot => requestOnBoot;
 
