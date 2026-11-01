@@ -43,5 +43,36 @@ namespace Wagenheimer.Tracking.Tests
             Assert.IsFalse(TrackingBuildProfiles.IsApplied(new string[0], "FTDOTD_TRACKING"));
             Assert.IsFalse(TrackingBuildProfiles.IsApplied(new[] { "FTDOTD_TRACKING" }, "  "));
         }
+
+        [Test]
+        public void MobileProfileNeedsAStableId()
+        {
+            Assert.IsTrue(TrackingBuildProfiles.NeedsStableId("", "iOS (Free)"));
+            Assert.IsTrue(TrackingBuildProfiles.NeedsStableId("   ", "iOS (Free)"));
+            Assert.IsFalse(TrackingBuildProfiles.NeedsStableId("iOSFree", "iOS (Free)"));
+        }
+
+        [Test]
+        public void CliProfileIdIsReadFromBuildProfileOrPublisher()
+        {
+            Assert.IsTrue(TrackingBuildProfiles.TryGetCliProfileId(
+                new[] { "Unity.exe", "-buildProfile", "iOSFree", "-platform", "iOS" }, out var id));
+            Assert.AreEqual("iOSFree", id);
+
+            Assert.IsTrue(TrackingBuildProfiles.TryGetCliProfileId(
+                new[] { "Unity.exe", "-publisher", "iOSFree" }, out var publisherId));
+            Assert.AreEqual("iOSFree", publisherId);
+
+            Assert.IsFalse(TrackingBuildProfiles.TryGetCliProfileId(
+                new[] { "Unity.exe", "-platform", "iOS" }, out _));
+        }
+
+        [Test]
+        public void CliProfileIdIgnoresEmptyValues()
+        {
+            Assert.IsFalse(TrackingBuildProfiles.TryGetCliProfileId(
+                new[] { "Unity.exe", "-buildProfile", "  " }, out _));
+            Assert.IsFalse(TrackingBuildProfiles.TryGetCliProfileId(null, out _));
+        }
     }
 }

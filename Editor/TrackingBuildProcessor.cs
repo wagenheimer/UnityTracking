@@ -41,6 +41,11 @@ namespace Wagenheimer.Tracking.Editor
             bool declares = TrackingDeclaration.DeclaresTracking(
                 settings.Enabled, settings.DeclarationMode, definePresent);
 
+            // Fail before the early return: a profile id that does not exist compiles the target with
+            // the wrong defines (no bundle id, no tracking define), which is exactly how an ATT build
+            // ships without the permission.
+            EnforceCliProfile(settings, definePresent);
+
             if (!declares)
             {
                 Debug.Log(
@@ -72,6 +77,38 @@ namespace Wagenheimer.Tracking.Editor
             }
 
             EnforceMandatoryRequirements(settings);
+        }
+
+        /// <summary>
+        /// A silent profile mismatch (dashboard id ≠ ProjectBuildConfig id) compiles the right target
+        /// with the wrong defines: no bundle id, no tracking define, no ad define. When ATT is
+        /// mandatory the build is blocked instead of shipping without the permission.
+        /// </summary>
+        private static void EnforceCliProfile(TrackingSettings settings, bool definePresent)
+        {
+            if (!settings.RequireTracking)
+                return;
+
+            if (!TrackingBuildProfiles.TryGetCliProfileId(Environment.GetCommandLineArgs(), out string profileId))
+                return;
+
+            var config = TrackingBuildProfiles.FindConfig();
+
+            if (!TrackingBuildProfiles.TryFindProfileIndex(
+                    config, profileId, out _, out bool profileDeclares, out string define))
+            {
+                var available = TrackingBuildProfiles.DescribeAvailableIds(config);
+                throw new BuildFailedException(
+                    $"[Tracking] -buildProfile '{profileId}' não existe no ProjectBuildConfig. " +
+                    $"Ids disponíveis: {available}. Corrija o perfil no AppDeployHub ou no repositório.");
+            }
+
+            if (profileDeclares && !definePresent)
+            {
+                throw new BuildFailedException(
+                    $"[Tracking] O perfil '{profileId}' deveria aplicar '{define}', mas o define não chegou aos " +
+                    "scripting define symbols da build. Verifique o ApplyScriptingDefinesStep e o -defines da CLI.");
+            }
         }
 
         /// <summary>

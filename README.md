@@ -295,6 +295,23 @@ projects without the build pipeline simply see the rule skipped.
 defines (bundle ids, store kits, remote config). The build-pipeline integration uses the same
 provider internally, so a custom provider replaces it.
 
+#### Stable profile ids
+
+Every mobile profile needs an `id` (for example `iOSFree`). The checker reports a warning when it is
+missing: the AppDeployHub repo scan skips id-less profiles and `-buildProfile <id>` cannot target
+them, so the dashboard matrix drifts from the repository.
+
+#### CLI profile gate
+
+With `requireTracking` on, an iOS build that receives `-buildProfile` / `-publisher` is blocked when:
+
+- the id does not match any profile in the project (`id`, publisher enum name, publisher number or
+  display name);
+- the matched profile declares tracking but the tracking define did not reach the build.
+
+That closes the silent case where a stale dashboard id compiles the target with the wrong defines —
+no bundle id, no ad define and, critically, no ATT declaration.
+
 ### CI
 
 The checker also runs headless and exits with code 1 on failures:
