@@ -6,6 +6,13 @@ namespace Wagenheimer.Tracking.Tests
 {
     public sealed class TrackingRequirementsTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            // The package registers the build-profile provider on load; these tests own the provider.
+            Wagenheimer.Tracking.Editor.TrackingRequirements.ClearProvider();
+        }
+
         [TearDown]
         public void TearDown()
         {
