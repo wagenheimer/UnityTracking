@@ -19,6 +19,24 @@
     "diagnostics"
   ],
   "category": "Services",
+  "wagenheimer": {
+    "defines": [
+      {
+        "symbol": "FTDOTD_TRACKING",
+        "description": "Default App Tracking Transparency define of com.wagenheimer.tracking (configurable in TrackingSettings). Compiles the ATT prompt and the IDFA-based tracking on iOS. If the game renamed it in TrackingSettings, document the new symbol in the game's own defines.",
+        "scope": "global",
+        "forbiddenWhen": [
+          "android",
+          "desktop",
+          "webgl"
+        ],
+        "platforms": [
+          "iOS"
+        ],
+        "severity": "warning"
+      }
+    ]
+  },
   "dependencies": {
     "com.unity.ads.ios-support": "1.0.1"
   }
