@@ -1,0 +1,25 @@
+{
+    "name": "Wagenheimer.Tracking.Analytics",
+    "rootNamespace": "Wagenheimer.Tracking",
+    "references": [
+        "Unity.Services.Core",
+        "Unity.Services.Analytics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "WAGENHEIMER_GAMEANALYTICS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.services.analytics",
+            "expression": "5.0.0",
+            "define": "WAGENHEIMER_GAMEANALYTICS"
+        }
+    ],
+    "noEngineReferences": false
+}

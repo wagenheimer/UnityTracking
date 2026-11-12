@@ -442,3 +442,31 @@ MIT — see [LICENSE](LICENSE).
 [I2 Localization](https://github.com/wagenheimer/UnityI2Localization)
 
 Explore every project at **[wagenheimer.com/opensource](https://wagenheimer.com/opensource)**.
+
+## Game analytics (Unity Analytics)
+
+`Runtime/Analytics` wraps **Unity Analytics** (`com.unity.services.analytics` 5+) in one static class,
+`Wagenheimer.Tracking.GameAnalytics`. It replaces the deprecated `UnityEngine.Analytics.Analytics.CustomEvent`
+(package `com.unity.analytics`) and compiles only when `com.unity.services.analytics` is installed.
+
+```csharp
+GameAnalytics.Initialize(waitForConsent: false);   // once, at startup; true when a consent dialog decides
+GameAnalytics.SetConsent(true);                     // call when the player accepts (false to stop collecting)
+
+GameAnalytics.LevelStart(12, attempt: 1);
+GameAnalytics.Track("hintUsed", ("level", 12), ("paid", false));   // custom event, name/value pairs
+GameAnalytics.Track("oldStyle", new Dictionary<string, object> { { "k", 1 } }); // same shape as CustomEvent
+```
+
+* Events recorded before the SDK is ready are buffered (200 max) and sent once collection starts.
+* Names are sanitized (letters, digits, `_`); values are normalized (enums become text, null is skipped).
+* Nothing throws: SDK errors are logged as warnings.
+* Unity Services can only be initialized in Play Mode; in the Editor outside Play Mode events are buffered.
+* Typed helpers share one taxonomy across games: `LevelStart/Complete/Fail/Quit`, `PowerUpUsed`, `TutorialStep`,
+  `AchievementUnlocked`, `Economy`, `PaywallShown/Dismissed`, `PurchaseStarted/Failed`, `PurchasesRestored`,
+  `Purchase` (standard `transaction` event), `AdShown`, `AdImpression` (standard `adImpression` event),
+  `LanguageChanged`, `ScreenView`.
+* Link the project to a Unity Cloud project and enable Analytics in the Unity Dashboard, otherwise nothing is received.
+
+The UnityUtils Cleanup Suite (Code scan) detects `Analytics.CustomEvent` calls and the deprecated package and
+migrates the calls to `GameAnalytics.Track`.
