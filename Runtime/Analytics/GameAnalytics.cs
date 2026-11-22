@@ -164,10 +164,20 @@ namespace Wagenheimer.Tracking
             Track(eventName, map);
         }
 
-        /// <summary>Records any Unity Analytics event, including the standard ones (ad impression, transaction).</summary>
+        /// <summary>
+        /// Records any Unity Analytics event, including the standard ones (ad impression, transaction).
+        /// Safe to call from any thread: ad SDK callbacks often arrive off the main thread, and Unity
+        /// Analytics reads main-thread-only device data, so those calls are moved to the main thread.
+        /// </summary>
         public static void Record(AnalyticsEvent analyticsEvent)
         {
             if (analyticsEvent == null) return;
+
+            if (!IsOnMainThread())
+            {
+                mainThreadContext.Post(_ => Record(analyticsEvent), null);
+                return;
+            }
 
             if (!IsReady || !IsCollecting)
             {
@@ -191,6 +201,20 @@ namespace Wagenheimer.Tracking
                 catch (Exception ex) { Warn("RecordEvent failed: " + ex.Message); }
             }
         }
+
+        private static System.Threading.SynchronizationContext mainThreadContext;
+        private static int mainThreadId;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void CaptureMainThread()
+        {
+            mainThreadContext = System.Threading.SynchronizationContext.Current;
+            mainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
+        }
+
+        /// <summary>True on the main thread, or when the main thread is unknown (nothing to hop to).</summary>
+        private static bool IsOnMainThread() =>
+            mainThreadContext == null || System.Threading.Thread.CurrentThread.ManagedThreadId == mainThreadId;
 
         private static void Warn(string message) => Debug.LogWarning("[GameAnalytics] " + message);
     }
